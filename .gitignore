@@ -4,6 +4,13 @@
 /AGENT.md
 /SRS.MD
 
+.claude
+.codex
+.vscode
+.vs
+.copilot
+.copilot-chat
+
 # Dependencies
 node_modules/
 **/node_modules/
