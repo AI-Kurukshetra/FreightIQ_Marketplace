@@ -1,5 +1,7 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { StatusBadge } from "@/components/dashboard/status-badge";
+import { RealtimeJourneyBoard } from "@/components/maps/realtime-journey-board";
 import { createClient } from "@/lib/supabase/server";
 import { getShipperContext, listShipperShipments } from "@/lib/shipper/server";
 
@@ -12,6 +14,9 @@ export default async function TrackingPage() {
   }
 
   const shipments = await listShipperShipments(supabase, context.profile.id, 50);
+  const activeShipments = shipments.filter((shipment) => ["matched", "picked_up", "in_transit"].includes(shipment.status)).length;
+  const deliveredShipments = shipments.filter((shipment) => shipment.status === "delivered").length;
+  const totalSpend = shipments.reduce((sum, shipment) => sum + (shipment.agreedPriceUsd ?? 0), 0);
 
   return (
     <section className="space-y-6">
@@ -19,6 +24,22 @@ export default async function TrackingPage() {
         <h1 className="text-3xl font-bold">Active Shipments</h1>
         <p className="mt-2 text-[var(--muted)]">Review current shipment progress and latest carrier updates.</p>
       </div>
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <InfoCard label="Tracked Shipments" value={shipments.length.toString()} />
+        <InfoCard label="Active Movement" value={activeShipments.toString()} />
+        <InfoCard label="Booked Spend" value={totalSpend > 0 ? `$${Math.round(totalSpend)}` : "TBD"} />
+      </div>
+
+      <RealtimeJourneyBoard
+        title="Live Shipment Tracking"
+        description="Route geometry, current shipment position, and timeline progress refresh automatically while your freight is in motion."
+        initialJourneys={shipments.slice(0, 8)}
+        refreshUrl="/api/shipper/shipments"
+        emptyTitle="There are no carrier-assigned shipments to track"
+        emptyBody="As soon as a shipment is matched, the route map will appear here with live progress from the latest status updates."
+        roleLabel="shipper"
+      />
 
       <div className="space-y-5">
         {shipments.length > 0 ? (
@@ -45,7 +66,15 @@ export default async function TrackingPage() {
               </div>
 
               <div className="mt-6">
-                <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Timeline</p>
+                <div className="flex items-center justify-between gap-4">
+                  <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Timeline</p>
+                  <Link
+                    href={`/dashboard/tracking/${shipment.id}`}
+                    className="text-sm font-bold text-[var(--brand)] hover:underline"
+                  >
+                    Open detail
+                  </Link>
+                </div>
                 <div className="mt-3 space-y-3">
                   {shipment.trackingUpdates.length > 0 ? (
                     shipment.trackingUpdates.map((update) => (
@@ -69,7 +98,7 @@ export default async function TrackingPage() {
           ))
         ) : (
           <div className="rounded-2xl border border-[var(--brand)]/10 bg-slate-800/40 p-10 text-center text-slate-400">
-            No shipments are linked to your loads yet.
+            {deliveredShipments > 0 ? "No active shipments right now." : "No shipments are linked to your loads yet."}
           </div>
         )}
       </div>

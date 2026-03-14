@@ -5,13 +5,36 @@ type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
 const ALLOWED_SHIPPER_ROLES = new Set(["shipper", "admin"]);
 const ACTIVE_LOAD_STATUSES = new Set(["open", "matched", "in_transit"]);
 const ACTIVE_SHIPMENT_STATUSES = new Set(["matched", "picked_up", "in_transit"]);
-const MODE_ORDER = ["truck", "rail", "sea", "air"] as const;
+const MODE_ORDER = [
+  "truck",
+  "ev_truck",
+  "van",
+  "flatbed",
+  "reefer",
+  "drayage",
+  "rail",
+  "intermodal",
+  "sea",
+  "air",
+  "express_air",
+] as const;
+export const SHIPPER_MODE_OPTIONS = [...MODE_ORDER];
 const EMISSION_FACTORS: Record<(typeof MODE_ORDER)[number], number> = {
   truck: 0.096,
+  ev_truck: 0.038,
+  van: 0.082,
+  flatbed: 0.101,
+  reefer: 0.11,
+  drayage: 0.094,
   rail: 0.028,
+  intermodal: 0.041,
   sea: 0.016,
   air: 0.602,
+  express_air: 0.72,
 };
+
+const LOAD_SELECT =
+  "id,shipper_id,title,origin_address,origin_lat,origin_lng,destination_address,destination_lat,destination_lng,pickup_date,delivery_date,budget_usd,status,co2_score,preferred_mode,weight_kg,volume_m3,freight_type,created_at";
 
 type RawProfile = {
   id: string;
@@ -27,7 +50,11 @@ type RawLoad = {
   shipper_id: string | null;
   title: string;
   origin_address: string;
+  origin_lat: number | null;
+  origin_lng: number | null;
   destination_address: string;
+  destination_lat: number | null;
+  destination_lng: number | null;
   pickup_date: string | null;
   delivery_date: string | null;
   budget_usd: number | null;
@@ -112,7 +139,11 @@ export type ShipperLoad = {
   id: string;
   title: string;
   originAddress: string;
+  originLat: number | null;
+  originLng: number | null;
   destinationAddress: string;
+  destinationLat: number | null;
+  destinationLng: number | null;
   pickupDate: string | null;
   deliveryDate: string | null;
   budgetUsd: number | null;
@@ -137,6 +168,12 @@ export type ShipperShipment = {
   loadId: string;
   loadTitle: string;
   routeLabel: string;
+  originAddress: string;
+  originLat: number | null;
+  originLng: number | null;
+  destinationAddress: string;
+  destinationLat: number | null;
+  destinationLng: number | null;
   carrierId: string;
   carrierName: string;
   agreedPriceUsd: number | null;
@@ -184,6 +221,12 @@ export type ShipperLoadDetail = {
   load: ShipperLoad;
   shipment: ShipperShipment | null;
   modalComparison: RawModalComparison | null;
+};
+
+export type ShipperShipmentDetail = {
+  profile: ShipperProfile;
+  shipment: ShipperShipment;
+  load: ShipperLoad;
 };
 
 export type ShipperSustainabilityData = {
@@ -248,6 +291,10 @@ export type CreateShipperLoadInput = {
   budgetUsd?: number | null;
 };
 
+export type UpdateShipperLoadInput = CreateShipperLoadInput & {
+  loadId: string;
+};
+
 export type ShipperContext =
   | { ok: true; userId: string; profile: ShipperProfile }
   | { ok: false; status: number; code: string; message: string };
@@ -268,7 +315,11 @@ function mapLoad(load: RawLoad): ShipperLoad {
     id: load.id,
     title: load.title,
     originAddress: load.origin_address,
+    originLat: load.origin_lat,
+    originLng: load.origin_lng,
     destinationAddress: load.destination_address,
+    destinationLat: load.destination_lat,
+    destinationLng: load.destination_lng,
     pickupDate: load.pickup_date,
     deliveryDate: load.delivery_date,
     budgetUsd: load.budget_usd,
@@ -332,11 +383,17 @@ function getModalCo2Value(comparison: RawModalComparison | null, mode: string) {
 
   switch (mode) {
     case "rail":
+    case "intermodal":
       return comparison.rail_co2;
     case "sea":
       return comparison.sea_co2;
     case "air":
+    case "express_air":
       return comparison.air_co2;
+    case "ev_truck":
+      return comparison.truck_co2 != null ? round(comparison.truck_co2 * 0.42) : null;
+    case "van":
+      return comparison.truck_co2 != null ? round(comparison.truck_co2 * 0.88) : null;
     default:
       return comparison.truck_co2;
   }
@@ -349,11 +406,12 @@ function buildApproximateModalComparison(weightKg: number | null, preferredMode:
 
   const estimatedDistanceKm = 250;
   const weightTonnes = weightKg / 1000;
+  const comparison = Object.fromEntries(MODE_ORDER.map((mode) => [mode, 0])) as Record<string, number>;
 
   return MODE_ORDER.reduce<Record<string, number>>((acc, mode) => {
     acc[mode] = round(estimatedDistanceKm * weightTonnes * EMISSION_FACTORS[mode]);
     return acc;
-  }, { truck: 0, rail: 0, sea: 0, air: 0, [preferredMode]: 0 });
+  }, { ...comparison, [preferredMode]: 0 });
 }
 
 export async function getShipperContext(supabase: SupabaseServerClient): Promise<ShipperContext> {
@@ -404,17 +462,19 @@ export async function getShipperContext(supabase: SupabaseServerClient): Promise
 export async function listShipperLoads(
   supabase: SupabaseServerClient,
   shipperId: string,
-  limit = 50
+  limit?: number
 ): Promise<ShipperLoad[]> {
-  const { data } = await supabase
+  let query = supabase
     .from("loads")
-    .select(
-      "id,shipper_id,title,origin_address,destination_address,pickup_date,delivery_date,budget_usd,status,co2_score,preferred_mode,weight_kg,volume_m3,freight_type,created_at"
-    )
+    .select(LOAD_SELECT)
     .eq("shipper_id", shipperId)
-    .order("created_at", { ascending: false })
-    .limit(limit)
-    .returns<RawLoad[]>();
+    .order("created_at", { ascending: false });
+
+  if (typeof limit === "number" && Number.isFinite(limit) && limit > 0) {
+    query = query.limit(Math.floor(limit));
+  }
+
+  const { data } = await query.returns<RawLoad[]>();
 
   return (data ?? []).map(mapLoad);
 }
@@ -462,6 +522,12 @@ export async function listShipperShipments(
       loadId: shipment.load_id,
       loadTitle: load?.title ?? "Shipment",
       routeLabel: load ? `${load.originAddress} -> ${load.destinationAddress}` : "Route unavailable",
+      originAddress: load?.originAddress ?? "Origin unavailable",
+      originLat: load?.originLat ?? null,
+      originLng: load?.originLng ?? null,
+      destinationAddress: load?.destinationAddress ?? "Destination unavailable",
+      destinationLat: load?.destinationLat ?? null,
+      destinationLng: load?.destinationLng ?? null,
       carrierId: shipment.carrier_id,
       carrierName: carrier?.company_name ?? "Assigned carrier",
       agreedPriceUsd: shipment.agreed_price_usd,
@@ -572,9 +638,7 @@ export async function getShipperLoadDetail(
 ): Promise<ShipperLoadDetail | null> {
   const { data: load } = await supabase
     .from("loads")
-    .select(
-      "id,shipper_id,title,origin_address,destination_address,pickup_date,delivery_date,budget_usd,status,co2_score,preferred_mode,weight_kg,volume_m3,freight_type,created_at"
-    )
+    .select(LOAD_SELECT)
     .eq("shipper_id", profile.id)
     .eq("id", loadId)
     .maybeSingle<RawLoad>();
@@ -599,6 +663,73 @@ export async function getShipperLoadDetail(
     load: mapLoad(load),
     shipment: shipments.find((shipment) => shipment.loadId === loadId) ?? null,
     modalComparison: comparison.data ?? buildFallbackComparison(load),
+  };
+}
+
+export async function getShipperShipmentDetail(
+  supabase: SupabaseServerClient,
+  profile: ShipperProfile,
+  shipmentId: string
+): Promise<ShipperShipmentDetail | null> {
+  const loads = await listShipperLoads(supabase, profile.id, 100);
+  const loadMap = new Map(loads.map((load) => [load.id, load]));
+  const loadIds = loads.map((load) => load.id);
+
+  if (loadIds.length === 0) {
+    return null;
+  }
+
+  const { data: shipment } = await supabase
+    .from("shipments")
+    .select(
+      "id,load_id,carrier_id,agreed_price_usd,transport_mode,co2_kg,distance_km,status,tracking_updates,estimated_delivery,actual_delivery,created_at"
+    )
+    .eq("id", shipmentId)
+    .in("load_id", loadIds)
+    .maybeSingle<RawShipment>();
+
+  if (!shipment) {
+    return null;
+  }
+
+  const { data: carrier } = await supabase
+    .from("carriers")
+    .select("id,owner_id,company_name,fleet_size,service_modes,coverage_corridors,rating,total_deliveries,verified,created_at")
+    .eq("id", shipment.carrier_id)
+    .maybeSingle<RawCarrier>();
+
+  const load = loadMap.get(shipment.load_id);
+
+  if (!load) {
+    return null;
+  }
+
+  return {
+    profile,
+    load,
+    shipment: {
+      id: shipment.id,
+      loadId: shipment.load_id,
+      loadTitle: load.title,
+      routeLabel: `${load.originAddress} -> ${load.destinationAddress}`,
+      originAddress: load.originAddress,
+      originLat: load.originLat,
+      originLng: load.originLng,
+      destinationAddress: load.destinationAddress,
+      destinationLat: load.destinationLat,
+      destinationLng: load.destinationLng,
+      carrierId: shipment.carrier_id,
+      carrierName: carrier?.company_name ?? "Assigned carrier",
+      agreedPriceUsd: shipment.agreed_price_usd,
+      transportMode: shipment.transport_mode,
+      co2Kg: shipment.co2_kg,
+      distanceKm: shipment.distance_km,
+      status: shipment.status,
+      estimatedDelivery: shipment.estimated_delivery,
+      actualDelivery: shipment.actual_delivery,
+      createdAt: shipment.created_at,
+      trackingUpdates: parseTrackingUpdates(shipment.tracking_updates),
+    },
   };
 }
 
@@ -823,9 +954,7 @@ export async function createShipperLoad(
   const { data, error } = await supabase
     .from("loads")
     .insert(payload)
-    .select(
-      "id,shipper_id,title,origin_address,destination_address,pickup_date,delivery_date,budget_usd,status,co2_score,preferred_mode,weight_kg,volume_m3,freight_type,created_at"
-    )
+    .select(LOAD_SELECT)
     .single<RawLoad>();
 
   if (error || !data) {
@@ -840,5 +969,173 @@ export async function createShipperLoad(
   return {
     ok: true as const,
     load: mapLoad(data),
+  };
+}
+
+export async function updateShipperLoad(
+  supabase: SupabaseServerClient,
+  profile: ShipperProfile,
+  input: UpdateShipperLoadInput
+) {
+  const loadId = input.loadId.trim();
+  const title = input.title.trim();
+  const originAddress = input.originAddress.trim();
+  const destinationAddress = input.destinationAddress.trim();
+  const preferredMode =
+    input.preferredMode && MODE_ORDER.includes(input.preferredMode as (typeof MODE_ORDER)[number])
+      ? input.preferredMode
+      : "truck";
+
+  if (!loadId || !title || !originAddress || !destinationAddress) {
+    return {
+      ok: false as const,
+      status: 422,
+      code: "VALIDATION_ERROR",
+      message: "Load id, title, origin address, and destination address are required.",
+    };
+  }
+
+  const { data: load } = await supabase
+    .from("loads")
+    .select(LOAD_SELECT)
+    .eq("shipper_id", profile.id)
+    .eq("id", loadId)
+    .maybeSingle<RawLoad>();
+
+  if (!load) {
+    return {
+      ok: false as const,
+      status: 404,
+      code: "LOAD_NOT_FOUND",
+      message: "Load was not found.",
+    };
+  }
+
+  if (load.status !== "open") {
+    return {
+      ok: false as const,
+      status: 409,
+      code: "LOAD_LOCKED",
+      message: "Only open loads can be edited.",
+    };
+  }
+
+  const { data: existingShipment } = await supabase
+    .from("shipments")
+    .select("id,status")
+    .eq("load_id", loadId)
+    .neq("status", "cancelled")
+    .maybeSingle<{ id: string; status: string }>();
+
+  if (existingShipment) {
+    return {
+      ok: false as const,
+      status: 409,
+      code: "LOAD_LOCKED",
+      message: "This load already has an active shipment and cannot be edited.",
+    };
+  }
+
+  const payload = {
+    title,
+    origin_address: originAddress,
+    destination_address: destinationAddress,
+    weight_kg: input.weightKg ?? null,
+    volume_m3: input.volumeM3 ?? null,
+    freight_type: input.freightType?.trim() || null,
+    pickup_date: input.pickupDate || null,
+    delivery_date: input.deliveryDate || null,
+    budget_usd: input.budgetUsd ?? null,
+    preferred_mode: preferredMode,
+  };
+
+  const { data, error } = await supabase
+    .from("loads")
+    .update(payload)
+    .eq("shipper_id", profile.id)
+    .eq("id", loadId)
+    .select(LOAD_SELECT)
+    .single<RawLoad>();
+
+  if (error || !data) {
+    return {
+      ok: false as const,
+      status: 500,
+      code: "LOAD_UPDATE_FAILED",
+      message: "Unable to update this load right now.",
+    };
+  }
+
+  return {
+    ok: true as const,
+    load: mapLoad(data),
+  };
+}
+
+export async function deleteShipperLoad(
+  supabase: SupabaseServerClient,
+  profile: ShipperProfile,
+  loadId: string
+) {
+  const nextLoadId = loadId.trim();
+  if (!nextLoadId) {
+    return {
+      ok: false as const,
+      status: 422,
+      code: "VALIDATION_ERROR",
+      message: "Load id is required.",
+    };
+  }
+
+  const { data: load } = await supabase
+    .from("loads")
+    .select("id,status")
+    .eq("shipper_id", profile.id)
+    .eq("id", nextLoadId)
+    .maybeSingle<{ id: string; status: string }>();
+
+  if (!load) {
+    return {
+      ok: false as const,
+      status: 404,
+      code: "LOAD_NOT_FOUND",
+      message: "Load was not found.",
+    };
+  }
+
+  const { data: existingShipment } = await supabase
+    .from("shipments")
+    .select("id,status")
+    .eq("load_id", nextLoadId)
+    .neq("status", "cancelled")
+    .maybeSingle<{ id: string; status: string }>();
+
+  if (existingShipment || load.status !== "open") {
+    return {
+      ok: false as const,
+      status: 409,
+      code: "LOAD_LOCKED",
+      message: "Only open loads without shipments can be deleted.",
+    };
+  }
+
+  const { error } = await supabase
+    .from("loads")
+    .delete()
+    .eq("shipper_id", profile.id)
+    .eq("id", nextLoadId);
+
+  if (error) {
+    return {
+      ok: false as const,
+      status: 500,
+      code: "LOAD_DELETE_FAILED",
+      message: "Unable to delete this load right now.",
+    };
+  }
+
+  return {
+    ok: true as const,
+    loadId: nextLoadId,
   };
 }

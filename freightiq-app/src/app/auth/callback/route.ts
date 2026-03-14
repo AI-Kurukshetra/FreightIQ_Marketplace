@@ -18,6 +18,10 @@ export async function GET(request: Request) {
     return NextResponse.redirect(`${origin}/auth?mode=login&error=callback_failed`);
   }
 
+  if (next === "/auth/reset-password") {
+    return NextResponse.redirect(`${origin}${next}`);
+  }
+
   const {
     data: { user },
   } = await supabase.auth.getUser();

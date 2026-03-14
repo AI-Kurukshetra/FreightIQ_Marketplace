@@ -3,13 +3,25 @@ import { notFound, redirect } from "next/navigation";
 import { StatusBadge } from "@/components/dashboard/status-badge";
 import { createClient } from "@/lib/supabase/server";
 import { getShipperContext, getShipperLoadDetail } from "@/lib/shipper/server";
+import { deleteLoadAction } from "../actions";
+
+function parseError(error: string | undefined) {
+  if (!error) return null;
+  if (error === "locked") return "This load cannot be deleted because it is already assigned.";
+  if (error === "not_found") return "This load is no longer available.";
+  if (error === "invalid_id") return "Invalid load id.";
+  return "Action failed. Please try again.";
+}
 
 export default async function LoadDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ loadId: string }>;
+  searchParams: Promise<{ created?: string; updated?: string; error?: string }>;
 }) {
   const { loadId } = await params;
+  const { created, updated, error } = await searchParams;
   const supabase = await createClient();
   const context = await getShipperContext(supabase);
 
@@ -23,8 +35,24 @@ export default async function LoadDetailPage({
     notFound();
   }
 
+  const errorMessage = parseError(error);
+
   return (
     <section className="space-y-6">
+      {created === "1" ? (
+        <div className="rounded-lg border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
+          Load created and published successfully.
+        </div>
+      ) : null}
+      {updated === "1" ? (
+        <div className="rounded-lg border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
+          Load updated successfully.
+        </div>
+      ) : null}
+      {errorMessage ? (
+        <div className="rounded-lg border border-red-400/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">{errorMessage}</div>
+      ) : null}
+
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--brand)]">Load Detail</p>
@@ -34,6 +62,16 @@ export default async function LoadDetailPage({
           </p>
         </div>
         <div className="flex items-center gap-3">
+          <Link href={`/dashboard/loads/${detail.load.id}/edit`} className="rounded-lg border border-sky-300/30 px-4 py-2 text-sm text-sky-200 hover:text-sky-100">
+            Edit
+          </Link>
+          <form action={deleteLoadAction}>
+            <input type="hidden" name="loadId" value={detail.load.id} />
+            <input type="hidden" name="sourcePath" value={`/dashboard/loads/${detail.load.id}`} />
+            <button type="submit" className="rounded-lg border border-red-300/30 px-4 py-2 text-sm text-red-200 hover:text-red-100">
+              Delete
+            </button>
+          </form>
           <StatusBadge status={detail.load.status} />
           <Link href="/dashboard/loads" className="rounded-lg border border-white/10 px-4 py-2 text-sm text-slate-300 hover:text-white">
             Back to loads
@@ -99,12 +137,26 @@ export default async function LoadDetailPage({
       <section className="rounded-2xl border border-[var(--brand)]/10 bg-slate-800/40 p-6">
         <h2 className="text-xl font-bold">Shipment Assignment</h2>
         {detail.shipment ? (
-          <div className="mt-5 grid gap-4 md:grid-cols-4">
-            <Info label="Carrier" value={detail.shipment.carrierName} />
-            <Info label="Transport" value={detail.shipment.transportMode} />
-            <Info label="Agreed Price" value={detail.shipment.agreedPriceUsd != null ? `$${detail.shipment.agreedPriceUsd}` : "TBD"} />
-            <Info label="Status" value={detail.shipment.status.replaceAll("_", " ")} />
-          </div>
+          <>
+            <div className="mt-5 grid gap-4 md:grid-cols-4">
+              <Info label="Carrier" value={detail.shipment.carrierName} />
+              <Info label="Transport" value={detail.shipment.transportMode} />
+              <Info label="Agreed Price" value={detail.shipment.agreedPriceUsd != null ? `$${detail.shipment.agreedPriceUsd}` : "TBD"} />
+              <Info label="Status" value={detail.shipment.status.replaceAll("_", " ")} />
+            </div>
+
+            <div className="mt-6 flex items-center justify-between gap-4">
+              <div className="text-sm text-slate-400">
+                Latest milestone: {detail.shipment.trackingUpdates.at(-1)?.label ?? "Awaiting first update"}
+              </div>
+              <Link
+                href={`/dashboard/tracking/${detail.shipment.id}`}
+                className="text-sm font-bold text-[var(--brand)] hover:underline"
+              >
+                Open shipment detail
+              </Link>
+            </div>
+          </>
         ) : (
           <p className="mt-5 text-sm text-slate-400">No shipment has been assigned to this load yet.</p>
         )}

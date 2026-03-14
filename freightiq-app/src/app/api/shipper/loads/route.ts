@@ -18,7 +18,7 @@ export async function GET() {
     );
   }
 
-  const loads = await listShipperLoads(supabase, context.profile.id, 50);
+  const loads = await listShipperLoads(supabase, context.profile.id);
   return NextResponse.json({ data: loads });
 }
 

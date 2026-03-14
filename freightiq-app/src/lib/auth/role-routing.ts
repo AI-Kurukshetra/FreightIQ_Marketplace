@@ -2,6 +2,14 @@ type RawRoleProfile = {
   role: string | null;
 };
 
+type RoleProfileQuery = {
+  select: (_columns: "role") => {
+    eq: (_column: "id", _value: string) => {
+      maybeSingle: () => Promise<{ data: RawRoleProfile | null }>;
+    };
+  };
+};
+
 const CARRIER_ALLOWED_PREFIXES = ["/dashboard/marketplace", "/dashboard/shipments", "/dashboard/settings"];
 const SHIPPER_ONLY_PREFIXES = ["/dashboard/loads", "/dashboard/tracking", "/dashboard/sustainability", "/dashboard/reports"];
 
@@ -26,10 +34,11 @@ export function isCarrierRole(role: string | null | undefined): boolean {
 }
 
 export async function getProfileRole(
-  supabase: { from: (table: "profiles") => any },
+  supabase: unknown,
   userId: string
 ): Promise<string | null> {
-  const { data } = await supabase
+  const client = supabase as { from: (table: "profiles") => RoleProfileQuery };
+  const { data } = await client
     .from("profiles")
     .select("role")
     .eq("id", userId)

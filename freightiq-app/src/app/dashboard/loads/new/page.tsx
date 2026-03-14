@@ -1,8 +1,17 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { getShipperContext } from "@/lib/shipper/server";
+import { getShipperContext, SHIPPER_MODE_OPTIONS } from "@/lib/shipper/server";
 import { createLoadAction } from "../actions";
+
+const FREIGHT_TYPE_OPTIONS = [
+  "Consumer goods",
+  "Food and beverage",
+  "Industrial materials",
+  "Electronics",
+  "Healthcare",
+  "Retail replenishment",
+];
 
 export default async function NewLoadPage({
   searchParams,
@@ -55,10 +64,11 @@ export default async function NewLoadPage({
               defaultValue="truck"
               name="preferredMode"
             >
-              <option value="truck">Truck</option>
-              <option value="rail">Rail</option>
-              <option value="sea">Sea</option>
-              <option value="air">Air</option>
+              {SHIPPER_MODE_OPTIONS.map((mode) => (
+                <option key={mode} value={mode}>
+                  {mode.replaceAll("_", " ")}
+                </option>
+              ))}
             </select>
           </label>
 
@@ -96,6 +106,17 @@ export default async function NewLoadPage({
           </label>
 
           <label className="block text-sm">
+            Volume (m3)
+            <input
+              className="mt-2 h-11 w-full rounded-lg border border-white/10 bg-[#102615]/40 px-4 text-sm text-white placeholder:text-[#5f7263] focus:border-[var(--brand)]"
+              inputMode="decimal"
+              name="volumeM3"
+              placeholder="e.g., 38"
+              type="text"
+            />
+          </label>
+
+          <label className="block text-sm">
             Budget (USD)
             <input
               className="mt-2 h-11 w-full rounded-lg border border-white/10 bg-[#102615]/40 px-4 text-sm text-white placeholder:text-[#5f7263] focus:border-[var(--brand)]"
@@ -107,6 +128,22 @@ export default async function NewLoadPage({
           </label>
 
           <label className="block text-sm">
+            Freight type
+            <input
+              className="mt-2 h-11 w-full rounded-lg border border-white/10 bg-[#102615]/40 px-4 text-sm text-white placeholder:text-[#5f7263] focus:border-[var(--brand)]"
+              list="freight-type-options"
+              name="freightType"
+              placeholder="Select or type a freight class"
+              type="text"
+            />
+            <datalist id="freight-type-options">
+              {FREIGHT_TYPE_OPTIONS.map((option) => (
+                <option key={option} value={option} />
+              ))}
+            </datalist>
+          </label>
+
+          <label className="block text-sm">
             Pickup date
             <input
               className="mt-2 h-11 w-full rounded-lg border border-white/10 bg-[#102615]/40 px-4 text-sm text-white focus:border-[var(--brand)]"
@@ -114,6 +151,19 @@ export default async function NewLoadPage({
               type="date"
             />
           </label>
+
+          <label className="block text-sm">
+            Delivery date
+            <input
+              className="mt-2 h-11 w-full rounded-lg border border-white/10 bg-[#102615]/40 px-4 text-sm text-white focus:border-[var(--brand)]"
+              name="deliveryDate"
+              type="date"
+            />
+          </label>
+        </div>
+
+        <div className="mt-6 rounded-2xl border border-[var(--brand)]/10 bg-black/10 p-4 text-sm text-slate-300">
+          FreightIQ will publish the load as `open`, calculate modal comparison when weight is present, and surface it to compatible carriers by preferred mode.
         </div>
 
         <div className="mt-6 flex items-center justify-end gap-3">

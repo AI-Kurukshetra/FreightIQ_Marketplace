@@ -1,5 +1,8 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { UnauthHeader } from "@/components/shared/unauth-header";
+import { getProfileRole, resolveDashboardPathForRole } from "@/lib/auth/role-routing";
+import { createClient } from "@/lib/supabase/server";
 
 const metrics = [
   {
@@ -58,7 +61,17 @@ const pricingPlans = [
   },
 ];
 
-export default function Home() {
+export default async function Home() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (user) {
+    const role = await getProfileRole(supabase, user.id);
+    redirect(resolveDashboardPathForRole(role, "/dashboard"));
+  }
+
   return (
     <div className="relative flex min-h-screen w-full flex-col overflow-x-hidden text-foreground">
       <UnauthHeader />

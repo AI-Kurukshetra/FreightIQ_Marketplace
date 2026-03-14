@@ -81,6 +81,61 @@ export async function registerAction(formData: FormData) {
   authRedirect("login", { registered: "1" });
 }
 
+export async function forgotPasswordAction(formData: FormData) {
+  const email = String(formData.get("email") ?? "").trim();
+
+  if (!email) {
+    authRedirect("login", { error: "missing_fields" });
+  }
+
+  const supabase = await createClient();
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${appUrl}/auth/callback?next=/auth/reset-password`,
+  });
+
+  if (error) {
+    authRedirect("login", { error: "reset_email_failed" });
+  }
+
+  authRedirect("login", { reset_sent: "1" });
+}
+
+export async function updatePasswordAction(formData: FormData) {
+  const password = String(formData.get("password") ?? "");
+  const confirmPassword = String(formData.get("confirmPassword") ?? "");
+
+  if (!password || !confirmPassword) {
+    redirect("/auth/reset-password?error=missing_fields");
+  }
+
+  if (password.length < 8) {
+    redirect("/auth/reset-password?error=weak_password");
+  }
+
+  if (password !== confirmPassword) {
+    redirect("/auth/reset-password?error=password_mismatch");
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    authRedirect("login", { error: "recovery_session_missing" });
+  }
+
+  const { error } = await supabase.auth.updateUser({ password });
+
+  if (error) {
+    redirect("/auth/reset-password?error=password_update_failed");
+  }
+
+  await supabase.auth.signOut();
+  authRedirect("login", { password_reset: "1" });
+}
+
 export async function signOutAction() {
   const supabase = await createClient();
   await supabase.auth.signOut();

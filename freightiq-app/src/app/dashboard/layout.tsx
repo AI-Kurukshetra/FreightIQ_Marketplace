@@ -29,9 +29,9 @@ export default async function DashboardLayout({
     : "Search shipments, loads, or carriers...";
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[#112111] text-white">
+    <div className="flex h-screen overflow-hidden bg-[var(--background)] text-[var(--foreground)]">
       {/* Sidebar */}
-      <aside className="flex w-64 shrink-0 flex-col border-r border-[var(--brand)]/10 bg-[#112111]">
+      <aside className="flex w-64 shrink-0 flex-col border-r border-[var(--brand)]/10 bg-[var(--surface)]">
         {/* Logo */}
         <div className="flex items-center gap-3 p-6">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--brand)]">
@@ -61,7 +61,7 @@ export default async function DashboardLayout({
       {/* Main Content */}
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Top Header */}
-        <header className="sticky top-0 z-40 flex h-16 items-center justify-between border-b border-[var(--brand)]/10 bg-[#112111]/80 px-8 backdrop-blur-md">
+        <header className="sticky top-0 z-40 flex h-16 items-center justify-between border-b border-[var(--brand)]/10 bg-[var(--surface-soft)] px-8 backdrop-blur-md">
           {/* Search */}
           <div className="flex flex-1 max-w-xl items-center gap-4">
             <div className="relative w-full">
@@ -69,7 +69,7 @@ export default async function DashboardLayout({
                 search
               </span>
               <input
-                className="w-full rounded-xl border-none bg-slate-800/50 py-2 pl-10 pr-4 text-sm text-white placeholder:text-slate-500 focus:ring-2 focus:ring-[var(--brand)]/50"
+                className="w-full rounded-xl border border-[var(--brand)]/10 bg-[var(--surface)] py-2 pl-10 pr-4 text-sm text-[var(--foreground)] placeholder:text-[var(--muted)] focus:ring-2 focus:ring-[var(--brand)]/40"
                 placeholder={searchPlaceholder}
                 type="text"
               />
@@ -79,9 +79,9 @@ export default async function DashboardLayout({
           {/* Right side */}
           <div className="flex items-center gap-4">
             {/* Notification bell */}
-            <button className="relative p-2 text-slate-400 transition-colors hover:text-[var(--brand)]">
+            <button className="relative p-2 text-[var(--muted)] transition-colors hover:text-[var(--brand)]">
               <span className="material-symbols-outlined">notifications</span>
-              <span className="absolute right-2 top-2 h-2 w-2 rounded-full border-2 border-[#112111] bg-[var(--brand)]" />
+              <span className="absolute right-2 top-2 h-2 w-2 rounded-full border-2 border-[var(--surface-soft)] bg-[var(--brand)]" />
             </button>
 
             <div className="mx-2 h-8 w-px bg-[var(--brand)]/10" />
@@ -100,7 +100,7 @@ export default async function DashboardLayout({
             {/* Sign out */}
             <form action={signOutAction}>
               <button
-                className="rounded-lg border border-white/10 px-3 py-1.5 text-xs text-slate-400 transition hover:border-[var(--brand)] hover:text-[var(--brand)]"
+                className="rounded-lg border border-[var(--brand)]/15 px-3 py-1.5 text-xs text-[var(--muted)] transition hover:border-[var(--brand)] hover:text-[var(--brand)]"
                 type="submit"
               >
                 Sign out

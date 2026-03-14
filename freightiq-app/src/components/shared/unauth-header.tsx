@@ -2,12 +2,12 @@ import Link from "next/link";
 
 export function UnauthHeader() {
   return (
-    <header className="sticky top-0 z-50 flex items-center justify-between border-b border-[var(--brand)]/10 bg-[#112111]/90 px-6 py-4 backdrop-blur lg:px-20">
+    <header className="sticky top-0 z-50 flex items-center justify-between border-b border-[var(--brand)]/10 bg-[var(--surface-soft)] px-6 py-4 backdrop-blur lg:px-20">
       <div className="flex items-center gap-3">
         <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--brand)] text-[#112111]">
           <span className="material-symbols-outlined font-bold">eco</span>
         </div>
-        <h2 className="text-xl font-bold tracking-tight text-white">FreightIQ</h2>
+        <h2 className="text-xl font-bold tracking-tight text-[var(--foreground)]">FreightIQ</h2>
       </div>
 
       <nav className="hidden items-center gap-8 md:flex">

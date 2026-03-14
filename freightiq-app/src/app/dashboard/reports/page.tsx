@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { StatusBadge } from "@/components/dashboard/status-badge";
 import { createClient } from "@/lib/supabase/server";
@@ -15,9 +16,18 @@ export default async function ReportsPage() {
 
   return (
     <section className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">Reports</h1>
-        <p className="mt-2 text-[var(--muted)]">Review shipment-level reporting and monthly operational summaries.</p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold">Reports</h1>
+          <p className="mt-2 text-[var(--muted)]">Review shipment-level reporting and monthly operational summaries.</p>
+        </div>
+
+        <Link
+          href="/api/shipper/reports/export"
+          className="rounded-xl bg-[var(--brand)] px-5 py-3 text-sm font-bold text-[#112111] transition hover:bg-[var(--brand-strong)]"
+        >
+          Export CSV
+        </Link>
       </div>
 
       <div className="grid gap-6 md:grid-cols-5">
@@ -69,6 +79,7 @@ export default async function ReportsPage() {
                   <th className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-500">Status</th>
                   <th className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-500">CO2</th>
                   <th className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-500">Mode</th>
+                  <th className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-500">Reported</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
@@ -84,11 +95,12 @@ export default async function ReportsPage() {
                         {report.co2Kg != null ? `${report.co2Kg} kg` : "Pending"}
                       </td>
                       <td className="px-4 py-3 text-sm capitalize text-slate-300">{report.transportMode}</td>
+                      <td className="px-4 py-3 text-sm text-slate-400">{new Date(report.reportedAt).toLocaleDateString()}</td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={5} className="px-4 py-10 text-center text-sm text-slate-400">
+                    <td colSpan={6} className="px-4 py-10 text-center text-sm text-slate-400">
                       No shipment reports available.
                     </td>
                   </tr>
